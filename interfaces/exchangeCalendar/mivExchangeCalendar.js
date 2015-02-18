@@ -819,7 +819,7 @@ calExchangeCalendar.prototype = {
 	setProperty: function setProperty(aName, aValue)
 	{
 
-		//if (this.debug) this.logInfo("setProperty. aName:"+aName+", aValue:"+aValue);
+		 if (this.debug) this.logInfo("setProperty. aName:"+aName+", aValue:"+aValue);
 		switch (aName) {
 		case "exchangeCurrentStatus":
 			//dump("name1:"+this.name+", exchangeCurrentStatus:"+this._exchangeCurrentStatus+", newStatus:"+aValue+"\n");
@@ -846,21 +846,21 @@ calExchangeCalendar.prototype = {
 		case "exchWebService.useOfflineCache":
 
 			this.useOfflineCache = aValue;
+		    if (this.debug) this.logInfo("setProperty: useOfflineCache = " + this.useOfflineCache + "  offlineCacheDB  "  + this.offlineCacheDB);  
 
-			if (!aValue) {
+			if (!this.useOfflineCache) {
 				if (this.offlineCacheDB) {
 					try {
-						if (this.offlineCacheDB) this.offlineCacheDB.close();
-						this.offlineCacheDB = null;
-					} catch(exc) {}
-				}
-
-				// Remove the offline cache database when we delete the calendar.
-				if (this.dbFile) {
-					this.dbFile.remove(true);
-					this.offlineCacheDB = null;
-				}
-			}
+						if (this.offlineCacheDB) this.offlineCacheDB.close(); 
+						this.offlineCacheDB = null;   
+					} catch(exc) {
+ 					    if (this.debug) this.logInfo("setProperty: Can't Modify Cache status");  
+					}
+				} 
+				if (this.dbFile) this.dbFile.remove(true); 
+				this.offlineCacheDB = null;  
+				// Remove the offline cache database when we delete the calendar. 
+			} 
 			return;
 		}
 
@@ -2048,24 +2048,22 @@ calExchangeCalendar.prototype = {
 
 	//  calIOperation getItem(in string aId, in calIOperationListener aListener);
 	getItem: function _getItem(aId, aListener, aRetry) {
-		if (this.debug) this.logInfo("getItem: aId:"+aId);
+ 		if (this.debug) this.logInfo("getItem: aId:"+aId);
 
 		if (!aListener)
 			return;
 
 		var item = null;
-
-
-		if (!item) {
-			for (var index in this.itemCacheById) {
+ 
+        for (var index in this.itemCacheById) {
 				if (this.itemCacheById[index]) {
 					if (this.itemCacheById[index].uid == aId) {
 						var item = this.itemCacheById[index];
 						break;
 					}
 				}
-			}
-		}
+		 }
+		 
 
 		if (!item) {
 			var cachedRequest = null;
@@ -2112,6 +2110,11 @@ calExchangeCalendar.prototype = {
 				if (this.debug) this.logInfo("Not found putting it in ItemSyncQue");
 				this.getItemSyncQueue.push( { id: aId,
 							      listener: aListener } );
+				this.notifyOperationComplete(aListener,
+                        Cr.NS_OK,
+                        Ci.calIOperationListener.GET,
+                        aId,
+                        null);
 				this.refresh();
 				return;
 			}
@@ -2138,6 +2141,11 @@ calExchangeCalendar.prototype = {
                                          Ci.calIOperationListener.GET,
                                          aId,
                                          "Can't deduce item type based on QI");
+			this.notifyOperationComplete(aListener,
+                    Cr.NS_OK,
+                    Ci.calIOperationListener.GET,
+                    aId,
+                    null);
 			return;
 		}
 
@@ -2148,12 +2156,12 @@ calExchangeCalendar.prototype = {
                                      Ci.calIOperationListener.GET,
                                      aId,
                                      null);
-	/*	
+	 	/*
 		aListener.onGetResult (this, 
 		                       Cr.NS_OK,
 		                       item_iid, null,
-		                       1, [item]);
-	*/	 
+		                       1, [item]);*/
+		return;
 	},
 
 	typeString: function _typeString(o) {
@@ -5842,7 +5850,9 @@ if (this.debug) this.logInfo(" ;;;; rrule:"+rrule.icalProperty.icalString);
 			if (this.debug) this.logInfo("Not adding to queue because we are disabled.");
 			return;
 		}
-
+		
+		if ( this.mIsOffline ){ if (this.debug) this.logInfo("addToQueue: you are offline!."); return; }
+		
 		//if (!aArgument["ServerVersion"]) aArgument["ServerVersion"] = this.exchangeStatistics.getServerVersion(this.serverUrl);
 
 		this.loadBalancer.addToQueue({ calendar: this,
@@ -8696,7 +8706,7 @@ else {
 			}
 	 		
 			//Check exchange calendar version clear cache
- 	 	 	this.checkExchCalAddonVerion();
+			if(!this.mIsOffline) this.checkExchCalAddonVerion();
 
 //			if (dbVersion < latestDBVersion) {
 				if (!this.offlineCacheDB.tableExists("version")) {
@@ -8902,7 +8912,7 @@ else {
 		this.createOfflineCacheDB();
 
 		if ((oldValue != aValue) && (aValue)) {
-			this.syncExchangeToOfflineCache();
+			 this.syncExchangeToOfflineCache();
 		}
 	},
 
@@ -9609,6 +9619,11 @@ catch(err) {
 
 	syncExchangeToOfflineCache: function _syncExchangeToOfflineCache()
 	{
+		if ((!this.useOfflineCache) || (!this.offlineCacheDB) || (this.mIsOffline) || (this.weAreSyncing) ) {
+			if (this.debug) this.logInfo("syncExchangeToOfflineCache: You are offline or already syncing or no cache enabled! " );
+			return;
+		}
+		if (this.debug) this.logInfo("syncExchangeToOfflineCache: You are online syncing  " );
 		// This will sync the specified period from Exchange to offlineCache.
 		var monthsAfter = this.globalFunctions.safeGetIntPref(this.prefs, "ecOfflineCacheMonthsAfterToday", 1, true)*31;
 		var monthsBefore = this.globalFunctions.safeGetIntPref(this.prefs, "ecOfflineCacheMonthsBeforeToday", 1, true)*31;
